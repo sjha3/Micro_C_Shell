@@ -378,20 +378,23 @@ int stdin_fd=dup(0);
 int stdout_fd=dup(1);
 int stderr_fd=dup(2); 
 int in=0,out=1,err=2;
-
+   set_filepointers(c,&in,&out,&err);
 if(built_in(c)){
-    set_filepointers(c,&in,&out,&err);
+    //set_filepointers(c,&in,&out,&err);
     execute_command(c);
 }
+      
 else{
    int pd = fork();
+   //set_filepointers(c,&in,&out,&err);
    if(pd==0){
       printf("only one command and not built_in : %s\n",c->args[0]);    
-      set_filepointers(c,&in,&out,&err);
+     // set_filepointers(c,&in,&out,&err);
     //execlp(c->args[0],c->args,NULL);
       printf("returned from set_filepointers ()\n");
-      dup2(stdout_fd,1);
+    //  dup2(stdout_fd,1);
       execvp(c->args[0],c->args);
+      dup2(stdout_fd,1);
       perror("execvp() failed"); 
     }
     else{
@@ -411,6 +414,7 @@ Cmd c = p->head;
 int pipe_fd[2];
 int pid;
 int fd_in=0,in=0,out=1,err=2;
+int in1=in,out1=out,err1=err;
 int ostdin = dup(0);
 int ostdout = dup(1);
 int ostderr = dup(2);
@@ -462,6 +466,7 @@ else{
 int last_pid = fork();
 if(last_pid==0){
 	printf("execute last command ddddddddddddddddd \n");
+        set_filepointers(c,&in1,&out1,&err1);
 	signal_enabler();
 	execvp(c->args[0],c->args);
 	return;
@@ -487,6 +492,8 @@ void execute_file(char file[],int in,int out,int err){
     Pipe p = parse();
     while(p){
     Cmd c = p->head;
+    if(strcmp(c->args[0],"logout")==0)
+        exit(0);
     execute_all_commands(p,in,out,err);
     printf("************ return from execute_all_command***********\n");
     p = p->next;
@@ -516,15 +523,37 @@ int main(int argc, char *argv[])
     int err = dup(stderr);
 
     if(t==2){
+
+    int in=dup(stdin);
+    int out=dup(stdout);
+    int err = dup(stderr);
 	char *home=malloc(1000*sizeof(char));    
 	strcpy(home,getenv("HOME"));
 	printf("home is %s\n",home);
 	strcat(home,"/.ushrc");
-	if(access(home,F_OK)==0)
-    	    execute_file(home,in,out,err);
-        fflush(stdin);
-	printf("returned from execute_file &&&&&&&&&&&&&&&&&&&&&&&\n");
+
+        int file_pid;
+        file_pid=fork();
+        if(file_pid==0){
+	  if(access(home,F_OK)==0)
+    	      execute_file(home,in,out,err);
+          return 0;
+	  }
+        
+        //fflush(stdin);
+       else if(file_pid>0){
+        wait(file_pid);
+
    	t = 1;
+        dup2(in,0);
+	dup2(out,1);
+	dup2(err,2);
+        close(in);
+        close(out);
+	close(err);
+	printf("returned from execute_file &&&&&&&&&&&&&&&&&&&&&&&\n");
+        //return 0;
+	}
      }
 
     p = parse();
