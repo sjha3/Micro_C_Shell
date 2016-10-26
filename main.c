@@ -361,6 +361,12 @@ void execute_command(Cmd c){
         handle_fg(c,shell_pgid);
     }            
 */    unset_filepointers(stdin_fd,in,stdout_fd,out,stderr_fd,err); 
+     dup2(stdin_fd,0);
+     dup2(stdout_fd,1);
+     dup2(stderr_fd,3);
+     close(stdin_fd);
+     close(stdout_fd);
+     close(stderr_fd);
 return;   
 }
 
@@ -380,9 +386,11 @@ if(built_in(c)){
 else{
    int pd = fork();
    if(pd==0){
-      printf("only one command and not built_in\n");    
+      printf("only one command and not built_in : %s\n",c->args[0]);    
       set_filepointers(c,&in,&out,&err);
     //execlp(c->args[0],c->args,NULL);
+      printf("returned from set_filepointers ()\n");
+      dup2(stdout_fd,1);
       execvp(c->args[0],c->args);
       perror("execvp() failed"); 
     }
@@ -398,40 +406,96 @@ return;
 
 //====================================================================================
 
-void execute_all_commands(Pipe p){
+void execute_all_commands(Pipe p, int fstdin,int fstdout,int fstderr){
 Cmd c = p->head;
-int pipe_fd;
+int pipe_fd[2];
 int pid;
-if(c->next==NULL)
+int fd_in=0,in=0,out=1,err=2;
+int ostdin = dup(0);
+int ostdout = dup(1);
+int ostderr = dup(2);
+if(c->next==NULL){
     execute_last_command(c);
+    return;
+    }
 else{
-    while(c){
-	pid=fork();
+
+    while(c->next){
+
+    set_filepointers(c,&in,&out,&err);
+    printf("piped command : %s \n",c->args[0]);
 	pipe(pipe_fd);
+	pid=fork();
 	if(pid==0){
-	    //child process
-	    //take care of pipe fd 
+            printf("inside child****** and cmd : %s and input is %d pipe_fd[0] : %d pipe_fd[1] : %d\n",c->args[0],fd_in,pipe_fd[0],pipe_fd[1]);
+	    signal_enabler();
+	    //child process ;take care of pipe fd 
+            close(pipe_fd[0]);
+	    //dup2(fd_in,0);
+	    dup2(pipe_fd[1],1);
+
+	    //dup2(pipe_fd[0],fd_in);
+	    close(pipe_fd[1]);
+	    //close(pipe_fd[0]);
+	   /* if(built_in(c)){
+		execute_command(c);
+                return;
+              }*/
+	    //else
+		execvp(c->args[0],c->args);
 	}
 	else if(pid>0){
-	    //parent process
+            wait(pid);
+	    printf("inside parent or outside child^^^^^^^^ pipe_fd[0] : %d pipe1 : %d\n",pipe_fd[0],pipe_fd[1]);
+	    close(pipe_fd[1]);
 	    //take care of pipe fd
+            //fd_in = pipe_fd[0];
+	    dup2(pipe_fd[0],0);
+	    close(pipe_fd[0]);
+
 	}
-    c=c->next;
+	    c = c->next;
+    //unset_filepointers(ostdin,in,ostdout,out,ostderr,err); 
     }
   }
+
+int last_pid = fork();
+if(last_pid==0){
+	printf("execute last command ddddddddddddddddd \n");
+	signal_enabler();
+	execvp(c->args[0],c->args);
+	return;
+       }
+   wait(NULL);
+dup2(ostdout,1);
+dup2(ostdin,0);
+dup2(ostderr,3);
+close(ostdin);
+close(ostdout);
+close(ostderr);
+
 }
+
+
 //====================================================================================
 
-void execute_file(char file[]){
+void execute_file(char file[],int in,int out,int err){
     int ostdin = dup(0);
+    int ostdout= dup(1);
     printf("executing ushrc ()\n");
     freopen(file,"r",stdin); //read from file as if reading arg from input
     Pipe p = parse();
     while(p){
     Cmd c = p->head;
-    execute_all_commands(p);
+    execute_all_commands(p,in,out,err);
+    printf("************ return from execute_all_command***********\n");
     p = p->next;
     }
+   freePipe(p);
+    dup2(ostdin,0);
+    dup2(ostdout,1);
+    close(ostdin);
+    close(ostdout);
 return;
 }
 
@@ -446,21 +510,27 @@ int main(int argc, char *argv[])
   signal_disabler();
 
   while ( 1 ) {
+    printf("%s%% ", host);
+    int in=dup(stdin);
+    int out=dup(stdout);
+    int err = dup(stderr);
+
     if(t==2){
 	char *home=malloc(1000*sizeof(char));    
 	strcpy(home,getenv("HOME"));
 	printf("home is %s\n",home);
 	strcat(home,"/.ushrc");
 	if(access(home,F_OK)==0)
-    	    execute_file(home);
+    	    execute_file(home,in,out,err);
+        fflush(stdin);
+	printf("returned from execute_file &&&&&&&&&&&&&&&&&&&&&&&\n");
    	t = 1;
      }
 
-    printf("%s%% ", host);
     p = parse();
     prPipe(p);
    while(p){ 
-   	execute_all_commands(p);
+   	execute_all_commands(p,in,out,err);
 	p=p->next;
    }
     freePipe(p);
