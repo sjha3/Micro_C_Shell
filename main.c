@@ -283,10 +283,12 @@ void set_filepointers(Cmd c, int *in, int *out, int *err){
     }
   
     else if(c->out==TappErr){
-    fd_err = open(c->outfile,O_CREAT|O_APPEND|O_RDWR|S_IRWXU,0666);
-    err=12;
-    dup2(fd_err,1);        
-    dup2(fd_err,2);
+    printf("inside TappErr append operation\n");
+    FILE *f = fopen(c->outfile, "a");
+    fseek(f,0,SEEK_END);
+    int fapp = fileno(f);
+    dup2(fapp,1);
+    dup2(fapp,2);
     }      
 return;
 }
