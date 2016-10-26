@@ -11,6 +11,7 @@
 #include <fcntl.h>
 //#include "myFunctions.h"
 #include "parse.h"
+#include <sys/resource.h>
 
 extern char **environ;
 
@@ -109,9 +110,9 @@ int built_in(Cmd c){
     
     if(strcmp(com,"bg")==0 || strcmp(com,"cd")==0 || strcmp(com,"fg")==0 || strcmp(com,"echo")==0 ||
     strcmp(com,"jobs")==0 || strcmp(com,"kill")==0 || strcmp(com,"logout")==0||strcmp(com,"nice")==0||
-    strcmp(com,"pwd")==0|| strcmp(com,"setenv")==0||strcmp(com,"unsetenv")==0 || strcmp(com,"where")==0)
+    strcmp(com,"pwd")==0|| strcmp(com,"setenv")==0||strcmp(com,"unsetenv")==0 || strcmp(com,"where")==0 || strstr(com,"nice")!=NULL)
     {
-        printf("command %s is built-in\n",com);
+        printf("%s is a shell built-in\n",com);
         return 1;
     }
   return 0;       
@@ -179,7 +180,13 @@ void handle_kill(Cmd c){
 
 void handle_cd(Cmd c){
     printf("inside handle_cd() with directory as %s\n",c->args[1]);
-    const char *target = c->args[1];
+    char *target=malloc(1000*sizeof(char));
+    if(c->args[1]!=NULL)
+    strcpy(target,c->args[1]);
+    else{
+     strcpy(target,getenv("HOME"));
+    }
+    printf("@@@@@@@@@@@@@ directory should be changed to %s\n",target);
     char directory[1024];
     if(chdir(target) == 0) {
      getcwd(directory, sizeof(directory));
@@ -240,6 +247,32 @@ void handle_echo(Cmd c){
     //free(var);
     free(val);
     return;    
+}
+
+void handle_nice(Cmd c){
+  printf("inside handle_nice() ::: com : %s args[1]:%d args[1]:%s command :%s\n",c->args[0],atoi(c->args[1]),c->args[1],c->args[2]);
+
+  int which = PRIO_PROCESS;
+  id_t pid;
+  int ret;
+  int pd_c = fork();
+
+  if(pd_c==0){
+  execvp(c->args[2],c->args+2);
+  perror("execvp() failed\n");
+  int new_p = atoi(c->args[1]);
+  ret = getpriority(which, 0); // 0 means current process
+  printf("current priority is %d",ret);
+  ret = setpriority(which, 0, new_p); 
+  if(ret==0)
+  printf("new priority is %d",getpriority(which, 0));
+  else
+  printf("unable to setpriority()\n");
+  }
+  wait(NULL);
+  printf("current priority is %d",getpriority(which, 0));
+
+  return;
 }
 
 void handle_logout(Cmd c){
@@ -356,11 +389,10 @@ void execute_command(Cmd c){
     if(strcmp(com,"logout")==0)
         handle_logout(c);
                 
-/*    if(strcmp(com,"fg")==0){
-        int shell_pgid = getpgid(getpid());
-        handle_fg(c,shell_pgid);
+    if(strcmp(com,"nice")==0 || strstr(com,"nice")!=NULL){
+	handle_nice(c);
     }            
-*/    unset_filepointers(stdin_fd,in,stdout_fd,out,stderr_fd,err); 
+    unset_filepointers(stdin_fd,in,stdout_fd,out,stderr_fd,err); 
      dup2(stdin_fd,0);
      dup2(stdout_fd,1);
      dup2(stderr_fd,3);
@@ -515,13 +547,17 @@ int main(int argc, char *argv[])
   int z = gethostname(host, 100);
   int t = 0;
   signal_disabler();
-
-  while ( 1 ) {
-    printf("%s%% ", host);
-    int in=dup(stdin);
+   int in=dup(stdin);
     int out=dup(stdout);
     int err = dup(stderr);
 
+
+  while ( 1 ) {
+    printf("%s%% ", host);
+/*    int in=dup(stdin);
+    int out=dup(stdout);
+    int err = dup(stderr);
+*/
     if(t==2){
 
     int in=dup(stdin);
@@ -529,11 +565,16 @@ int main(int argc, char *argv[])
     int err = dup(stderr);
 	char *home=malloc(1000*sizeof(char));    
 	strcpy(home,getenv("HOME"));
-	printf("home is %s\n",home);
+	//printf("home is %s\n",home);
 	strcat(home,"/.ushrc");
 
         int file_pid;
         file_pid=fork();
+   if(access(home,F_OK)!=0){
+       t=1;
+	continue;
+	}
+
         if(file_pid==0){
 	  if(access(home,F_OK)==0)
     	      execute_file(home,in,out,err);
