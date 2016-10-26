@@ -275,7 +275,9 @@ void set_filepointers(Cmd c, int *in, int *out, int *err){
     else if(c->out==Tapp){
     //fd_out = open(c->outfile,O_CREAT|O_APPEND|O_RDWR|S_IRWXU,0666);
     //dup2(fd_out,1); 
+    printf("inside append operation\n");
     FILE *f = fopen(c->outfile, "a");
+    fseek(f,0,SEEK_END);
     int fapp = fileno(f);
     dup2(fapp,1);   
     }
@@ -374,11 +376,19 @@ if(built_in(c)){
     execute_command(c);
 }
 else{
-    printf("no pipe and not built in command\n");    
-    set_filepointers(c,&in,&out,&err);
+   int pd = fork();
+   if(pd==0){
+      printf("only one command and not built_in\n");    
+      set_filepointers(c,&in,&out,&err);
     //execlp(c->args[0],c->args,NULL);
-    execvp(c->args[0],c->args);
-    perror("execvp() failed");
+      execvp(c->args[0],c->args);
+      perror("execvp() failed"); 
+    }
+    else{
+      int status;
+      wait(&status);
+      printf("inside parent()\n");
+    }
 }
 unset_filepointers(stdin_fd,in,stdout_fd,out,stderr_fd,err);
 return;
