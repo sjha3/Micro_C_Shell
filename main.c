@@ -111,7 +111,7 @@ int built_in(Cmd c){
     strcmp(com,"jobs")==0 || strcmp(com,"kill")==0 || strcmp(com,"logout")==0||strcmp(com,"nice")==0||
     strcmp(com,"pwd")==0|| strcmp(com,"setenv")==0||strcmp(com,"unsetenv")==0 || strcmp(com,"where")==0 || strstr(com,"nice")!=NULL)
     {
-        printf("%s is a shell built-in\n",com);
+        //printf("%s is a shell built-in\n",com);
         return 1;
     }
   return 0;       
@@ -187,7 +187,10 @@ void handle_whereis(Cmd c){
     char s[]=":";
     strcpy(path,getenv("PATH"));
     char *token=strtok(path,s);
-    
+
+    if(built_in(c))
+	printf("%s is a shell built in \n",c->args[1]);    
+
     while(token){
      char full_path[1000];   
      strcpy(full_path,token);
@@ -467,9 +470,9 @@ int main(int argc, char *argv[])
   int run=0; //only for testing ; change it to 0 later on
   char host[100];// = "armadillo";
   int z = gethostname(host, 100);
-  int t = 1;
+  int t = 2;
   signal_disabler();
-  int in=dup(stdin);
+  int in=dup(STDIN_FILENO);
   int out=dup(stdout);
   int err = dup(stderr);
   char *home=malloc(1000*sizeof(char));    
@@ -477,30 +480,40 @@ int main(int argc, char *argv[])
   strcat(home,"/.ushrc");
 
  if(access(home,F_OK)==0 && t==2){
-    int t = 1;
-    int fd = open(home,O_RDONLY);
+    int in = dup(0);
+    t = 1; int fd=0;
+    fd = open(home,O_RDONLY);
     dup2(fd,0);
+//   freopen(home,"r",stdin); //read from file as if reading arg from input
+    if(fd==-1)
+     exit(0);
     Pipe p = parse();
     while(p){
     Cmd c = p->head;
     if(strcmp(c->args[0],"logout")==0)
         exit(0);
-    execute_all_commands(p,0,1,2);
+    //execute_all_commandc(c,in,out,err);
+    execute_last_command(c);
     p = p->next;
     }
    freePipe(p);
    close(fd);
    dup2(in,0);
+   //return 0;
 }
 
 
   while ( 1 ) {
-    printf("%s%% ", host);
+//    printf("%s%% ", host);
      if(t==1){
+      //printf("flush everytihng");
+      //fflush(stdin);
       fflush(stdout);
       fflush(stderr);
       t=0;
       }
+    printf("%s%% ", host);
+
     p = parse();
     prPipe(p);
    while(p){ 
