@@ -479,7 +479,7 @@ int main(int argc, char *argv[])
   strcpy(home,getenv("HOME"));
   strcat(home,"/.ushrc");
 
- if(access(home,F_OK)==0 && t==2){
+ if(access(home,F_OK)==0 && t==3){
     int in = dup(0);
     t = 1; int fd=0;
     fd = open(home,O_RDONLY);
